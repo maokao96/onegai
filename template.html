@@ -1,0 +1,194 @@
+<title>やること</title>
+<script>
+// ==== Claude: replace this block only. Everything below it stays as it is. ====
+const DATA = {
+  title: "Stripe を使えるようにする",
+  unblocks: "これが終わると、決済フォームの実装に入れます。所要 5 分＋審査待ち 1 日ほど。",
+  // steps: things only you can do. url は必ず実在する直リンク。url は省略可。
+  steps: [
+    { id: "s1", label: "Stripe に登録する",
+      body: "メールアドレスとパスワードだけで作れます。事業情報は後で足せます。",
+      url: "https://dashboard.stripe.com/register", urlLabel: "登録ページを開く" },
+    { id: "s2", label: "本人確認を出す",
+      body: "運転免許証かパスポートの撮影。審査は1営業日ほど。",
+      url: "https://dashboard.stripe.com/settings/update", urlLabel: "本人確認へ" },
+    { id: "s3", label: "APIキーをターミナルに貼る",
+      body: "「シークレットキー」をコピーして、ターミナルに直接貼ってください。このページには入れないこと。",
+      url: "https://dashboard.stripe.com/apikeys", urlLabel: "キーの発行ページ" }
+  ],
+  // choices: 落とすものだけタップしてもらう候補。不要なら空配列 [] に。
+  choicesTitle: "出す商品（落とすものだけタップ）",
+  choices: [
+    { id: "E1", label: "基本プラン 月980円", meta: "既存顧客の8割が該当", why: "主力。外す理由は無いはず" },
+    { id: "E2", label: "年払いプラン 9800円", meta: "2ヶ月分お得", why: "キャッシュフローが安定する" },
+    { id: "E3", label: "法人プラン 月4800円", meta: "請求書払い対応が必要", why: "対応が間に合わないなら落とす" }
+  ]
+};
+// ==== end of the block to replace ====
+</script>
+<style>
+:root{
+  --bg:#F7F7F5; --card:#FFFFFF; --ink:#1D2021; --sub:#6B7280; --line:#E3E3DF;
+  --acc:#2F6F4E; --acc-ink:#FFFFFF; --drop:#B4443A; --drop-bg:#FBEFEE;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16181A; --card:#1F2225; --ink:#E8EAEA; --sub:#9AA3AA; --line:#2E3337;
+  --acc:#5BA37D; --acc-ink:#10221A; --drop:#D9776D; --drop-bg:#2A1D1C;
+}}
+:root[data-theme="dark"]{
+  --bg:#16181A; --card:#1F2225; --ink:#E8EAEA; --sub:#9AA3AA; --line:#2E3337;
+  --acc:#5BA37D; --acc-ink:#10221A; --drop:#D9776D; --drop-bg:#2A1D1C;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:0 16px 120px;
+  font:16px/1.75 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;}
+main{max-width:600px;margin:0 auto}
+header{padding:32px 0 8px}
+h1{font-size:24px;line-height:1.4;margin:0 0 8px;text-wrap:balance}
+.unblocks{color:var(--sub);font-size:14px;margin:0}
+h2{font-size:14px;letter-spacing:.08em;color:var(--sub);font-weight:600;
+  margin:32px 0 12px;padding-top:20px;border-top:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;margin-bottom:10px;transition:opacity .15s}
+.row{display:flex;gap:12px;align-items:flex-start}
+.tick{flex:0 0 26px;height:26px;margin-top:2px;border-radius:7px;border:2px solid var(--line);
+  background:transparent;cursor:pointer;display:grid;place-items:center;padding:0;
+  font-size:15px;line-height:1;color:transparent;transition:.12s}
+.tick:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.card.on .tick{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.label{font-weight:600;font-size:16px}
+.body{color:var(--sub);font-size:14px;margin-top:2px}
+.meta{color:var(--sub);font-size:14px;margin-top:2px}
+.why{color:var(--sub);font-size:14px;margin-top:4px;font-style:italic}
+.go{display:inline-block;margin-top:10px;background:var(--acc);color:var(--acc-ink);
+  text-decoration:none;font-weight:600;font-size:15px;padding:11px 18px;border-radius:8px}
+.go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.card.done{opacity:.5}
+.card.done .label{text-decoration:line-through}
+/* choices default ON = keep. tapped = dropped */
+.choice .tick{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.choice.dropped{background:var(--drop-bg);border-color:var(--drop)}
+.choice.dropped .tick{background:transparent;border-color:var(--drop);color:var(--drop)}
+.choice.dropped .label{text-decoration:line-through;color:var(--drop)}
+.hint{color:var(--sub);font-size:14px;margin:-4px 0 12px}
+textarea{width:100%;min-height:70px;background:var(--card);color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px;resize:vertical}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));}
+.bar-in{max-width:600px;margin:0 auto;display:flex;gap:12px;align-items:center}
+#copy{flex:1;background:var(--acc);color:var(--acc-ink);border:0;border-radius:9px;
+  padding:15px;font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+#copy:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#status{color:var(--sub);font-size:14px;white-space:nowrap}
+#fallback{display:none;margin-top:10px}
+#fallback textarea{font-family:var(--mono);font-size:14px;min-height:110px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<main>
+  <header><h1 id="t"></h1><p class="unblocks" id="u"></p></header>
+  <section id="steps-sec" hidden><h2>あなたにしかできない作業</h2><div id="steps"></div></section>
+  <section id="choices-sec" hidden><h2 id="ct"></h2>
+    <p class="hint">全部オンです。<strong>落とすものだけ</strong>タップしてください。</p>
+    <div id="choices"></div></section>
+  <h2>ひとこと（任意）</h2>
+  <textarea id="note" placeholder="気づいたこと・詰まったところ"></textarea>
+  <div id="fallback"><p class="hint">下のテキストを選んでコピーしてください。</p><textarea id="fbtext" readonly></textarea></div>
+</main>
+<div class="bar"><div class="bar-in">
+  <button id="copy">結果をコピー</button><span id="status"></span>
+</div></div>
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  document.title = DATA.title || "やること";
+  $("#t").textContent = DATA.title || "やること";
+  $("#u").textContent = DATA.unblocks || "";
+
+  const state = { done:new Set(), dropped:new Set() };
+
+  function card(item, kind){
+    const el = document.createElement("div");
+    el.className = "card" + (kind === "choice" ? " choice" : "");
+    const btn = document.createElement("button");
+    btn.className = "tick"; btn.textContent = "✓";
+    btn.setAttribute("aria-pressed", kind === "choice" ? "true" : "false");
+    btn.setAttribute("aria-label", kind === "choice" ? item.label + " を出す" : item.label + " を終わった扱いにする");
+    const main = document.createElement("div");
+    main.style.flex = "1";
+    const lab = document.createElement("div"); lab.className = "label"; lab.textContent = item.label;
+    main.appendChild(lab);
+    if (item.body){ const b=document.createElement("div"); b.className="body"; b.textContent=item.body; main.appendChild(b); }
+    if (item.meta){ const m=document.createElement("div"); m.className="meta"; m.textContent=item.meta; main.appendChild(m); }
+    if (item.why){ const w=document.createElement("div"); w.className="why"; w.textContent=item.why; main.appendChild(w); }
+    if (item.url){
+      const a=document.createElement("a"); a.className="go"; a.href=item.url;
+      a.target="_blank"; a.rel="noopener noreferrer";
+      a.textContent=item.urlLabel || "開く"; main.appendChild(a);
+    }
+    const row = document.createElement("div"); row.className="row";
+    row.appendChild(btn); row.appendChild(main); el.appendChild(row);
+
+    function toggle(){
+      if (kind === "choice"){
+        const dropped = el.classList.toggle("dropped");
+        dropped ? state.dropped.add(item.id) : state.dropped.delete(item.id);
+        btn.setAttribute("aria-pressed", String(!dropped));
+      } else {
+        const done = el.classList.toggle("done");
+        el.classList.toggle("on", done);
+        done ? state.done.add(item.id) : state.done.delete(item.id);
+        btn.setAttribute("aria-pressed", String(done));
+      }
+    }
+    btn.addEventListener("click", toggle);
+    return el;
+  }
+
+  const steps = DATA.steps || [];
+  if (steps.length){
+    $("#steps-sec").hidden = false;
+    steps.forEach(s => $("#steps").appendChild(card(s, "step")));
+  }
+  const choices = DATA.choices || [];
+  if (choices.length){
+    $("#choices-sec").hidden = false;
+    $("#ct").textContent = DATA.choicesTitle || "候補（落とすものだけタップ）";
+    choices.forEach(c => $("#choices").appendChild(card(c, "choice")));
+  }
+
+  function result(){
+    const stamp = new Date().toLocaleString("sv").slice(0,16);
+    const lines = ["[handoff] " + (DATA.title||"") + " — " + stamp];
+    if (steps.length){
+      const done = steps.filter(s=>state.done.has(s.id)).map(s=>s.id);
+      const skip = steps.filter(s=>!state.done.has(s.id)).map(s=>s.id);
+      if (done.length) lines.push("done: " + done.join(", "));
+      if (skip.length) lines.push("skip: " + skip.join(", "));
+    }
+    if (choices.length){
+      const out = choices.filter(c=>state.dropped.has(c.id)).map(c=>c.id);
+      lines.push("out: " + (out.length ? out.join(", ") : "(なし)"));
+    }
+    const n = $("#note").value.trim();
+    if (n) lines.push("note: " + n.replace(/\n+/g, " / "));
+    return lines.join("\n");
+  }
+
+  $("#copy").addEventListener("click", async () => {
+    const text = result();
+    try {
+      // clipboard API needs a secure context; file:// often is not one
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(text);
+      $("#status").textContent = "コピーしました。貼ってください";
+    } catch (e) {
+      $("#fallback").style.display = "block";
+      const ta = $("#fbtext");
+      ta.value = text; ta.focus(); ta.select();
+      $("#status").textContent = "下の欄からコピーを";
+      ta.scrollIntoView({behavior:"smooth", block:"center"});
+    }
+  });
+})();
+</script>
