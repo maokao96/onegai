@@ -7,6 +7,7 @@ const DATA = {
   // これが終わると何が進むか。一行
   unblocks: "決済フォームの実装に入れます。5分ほど＋審査待ち1日",
   // 本人にしかできない作業だけ。url は実在する直リンク（無ければ省略）
+  // 相手が管理画面に貼る文字があるなら copy に入れる。画面に出て、ボタンでコピーできる
   steps: [
     { id: "s1", label: "Stripe に登録する",
       body: "メールアドレスとパスワードだけで作れます",
@@ -14,7 +15,11 @@ const DATA = {
     { id: "s2", label: "本人確認を出す",
       body: "免許証かパスポートの撮影。審査は1営業日ほど",
       url: "https://dashboard.stripe.com/settings/update", urlLabel: "本人確認へ" },
-    { id: "s3", label: "APIキーをターミナルに貼る",
+    { id: "s3", label: "Webhook の宛先を登録する",
+      body: "「エンドポイントを追加」を押して、下の URL を貼ってください",
+      url: "https://dashboard.stripe.com/webhooks", urlLabel: "Webhook の設定",
+      copy: "https://example.com/api/stripe/webhook", copyLabel: "URL をコピー" },
+    { id: "s4", label: "APIキーをターミナルに貼る",
       body: "「シークレットキー」をコピーして、ターミナルに直接貼ってください。この画面には入れないこと。PCで行う作業です",
       url: "https://dashboard.stripe.com/apikeys", urlLabel: "キーの発行ページ" }
   ]
@@ -51,9 +56,18 @@ h2{font-size:14px;letter-spacing:.06em;color:var(--sub);font-weight:600;margin:2
 .card.done .label{text-decoration:line-through}
 .label{font-weight:600;font-size:16px}
 .body{color:var(--sub);font-size:14px;margin-top:3px}
-.go{display:inline-block;margin-top:11px;background:var(--acc);color:var(--acc-ink);
+.copy-t{display:inline-block;max-width:100%;margin-top:10px;
+  background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:10px 12px;font-family:var(--mono);font-size:14px;line-height:1.65;
+  white-space:pre-wrap;word-break:break-all;user-select:all}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.go{display:inline-block;background:var(--acc);color:var(--acc-ink);
   text-decoration:none;font-weight:600;font-size:15px;padding:11px 18px;border-radius:8px}
 .go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.cp{background:transparent;color:var(--acc);border:1.5px solid var(--acc);border-radius:8px;
+  padding:10px 16px;font:inherit;font-weight:600;font-size:15px;cursor:pointer}
+.cp.ok{background:var(--acc);color:var(--acc-ink)}
+.cp:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);
   padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
 .bar-in{max-width:600px;margin:0 auto;display:flex;gap:12px;align-items:center}
@@ -84,6 +98,23 @@ h2{font-size:14px;letter-spacing:.06em;color:var(--sub);font-weight:600;margin:2
   $("#u").textContent = DATA.unblocks || "";
   const done = new Set();
 
+  // クリップボード API は安全なページでしか使えない。file:// では古い方法に落とす
+  async function toClipboard(text){
+    try {
+      if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true; }
+    } catch (e) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
   (DATA.steps || []).forEach(item => {
     const el = document.createElement("div");
     el.className = "card";
@@ -95,10 +126,31 @@ h2{font-size:14px;letter-spacing:.06em;color:var(--sub);font-weight:600;margin:2
     const lab = document.createElement("div"); lab.className = "label"; lab.textContent = item.label;
     col.appendChild(lab);
     if (item.body){ const b = document.createElement("div"); b.className = "body"; b.textContent = item.body; col.appendChild(b); }
-    if (item.url){
-      const a = document.createElement("a"); a.className = "go"; a.href = item.url;
-      a.target = "_blank"; a.rel = "noopener noreferrer";
-      a.textContent = item.urlLabel || "開く"; col.appendChild(a);
+    if (item.copy){
+      // 貼る文字は画面にも出す。コピーが効かない環境でも手で選べるように
+      const t = document.createElement("div"); t.className = "copy-t"; t.textContent = item.copy;
+      col.appendChild(t);
+    }
+    if (item.url || item.copy){
+      const acts = document.createElement("div"); acts.className = "acts";
+      if (item.url){
+        const a = document.createElement("a"); a.className = "go"; a.href = item.url;
+        a.target = "_blank"; a.rel = "noopener noreferrer";
+        a.textContent = item.urlLabel || "開く"; acts.appendChild(a);
+      }
+      if (item.copy){
+        const cp = document.createElement("button"); cp.className = "cp"; cp.type = "button";
+        const label = item.copyLabel || "コピー";
+        cp.textContent = label;
+        cp.addEventListener("click", async () => {
+          const ok = await toClipboard(item.copy);
+          cp.textContent = ok ? "コピーしました" : "上の文字を選んでコピー";
+          cp.classList.toggle("ok", ok);
+          setTimeout(() => { cp.textContent = label; cp.classList.remove("ok"); }, 2000);
+        });
+        acts.appendChild(cp);
+      }
+      col.appendChild(acts);
     }
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(btn); row.appendChild(col); el.appendChild(row);
@@ -122,18 +174,16 @@ h2{font-size:14px;letter-spacing:.06em;color:var(--sub);font-weight:600;margin:2
 
   $("#copy").addEventListener("click", async () => {
     const text = result();
-    try {
-      // クリップボード API は安全なページでしか使えない（file:// では動かないことが多い）
-      if (!navigator.clipboard) throw new Error("no clipboard");
-      await navigator.clipboard.writeText(text);
+    if (await toClipboard(text)) {
       $("#status").textContent = "コピーしました";
-    } catch (e) {
-      $("#fb").style.display = "block";
-      const ta = $("#fbt");
-      ta.value = text; ta.focus(); ta.select();
-      $("#status").textContent = "下の欄から";
-      ta.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
     }
+    // どうしてもコピーできない環境。選んで取れる欄を出す
+    $("#fb").style.display = "block";
+    const ta = $("#fbt");
+    ta.value = text; ta.focus(); ta.select();
+    $("#status").textContent = "下の欄から";
+    ta.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 })();
 </script>
